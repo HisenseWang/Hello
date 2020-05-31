@@ -4,12 +4,14 @@
 #include<Windows.h>
 #include<WinSock2.h>
 #include <ws2tcpip.h>
+#include"DataPackage.h"
 using namespace std;
 
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
 //客户端：
 char sendbuf[128]{ 0 }; //发送数据区
 char recvbuf[128]{ 0 };//接受数据区
+//DP dpinfo{};//接受数据结构包
 
 
 int main(void)
@@ -80,7 +82,7 @@ int main(void)
 
 	while (true)
 	{
-		//发送新
+		//发送
 		memset(sendbuf, 0, sizeof(sendbuf));
 		cout << "请输入请求信息：" << endl;
 		cin.getline(sendbuf, 128);
@@ -104,7 +106,8 @@ int main(void)
 		if (iResult > 0)
 		{
 			cout << "Bytes received : " << iResult << endl;
-			cout << "recv msg :" << recvbuf << endl;
+			DP* dpinfo = (DP*)(recvbuf);//接受数据缓冲区转换为数据包
+			cout << "recv msg :" << dpinfo->Name <<" "<<dpinfo->Age<<" "<<dpinfo->Address<< endl;
 		}
 		else if (iResult == 0)
 		{
@@ -176,9 +179,4 @@ int main(void)
 	WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 	return 0;
 
-	/**
-
-
-
-	***/
 }

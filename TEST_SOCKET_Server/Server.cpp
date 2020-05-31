@@ -4,12 +4,15 @@
 #include<Windows.h>
 #include<WinSock2.h>
 #include <ws2tcpip.h> //getaddrinfo() 函数头文件
+#include"DataPackage.h"
 using namespace std;
 
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
 char recvBuf[128] { 0 };//接受缓存区
 char sendbuf[128]{0 }; //发送缓冲区
 char info[32]{ 0 };//处理信息缓冲区
+
+DP dpinfo{};
 
 
 int main(void)
@@ -164,10 +167,8 @@ int main(void)
 
 
 		//第六步，处理请求数据
-		memset(info, 0, sizeof(info));
-		memset(sendbuf, 0, sizeof(sendbuf));
-		strcpy_s(sendbuf, "Server sending data test: ");
-		if (strncmp(recvBuf, "name",sizeof("name")) == 0)
+		
+		if (strncmp(recvBuf, "getuser",sizeof("getuser")) == 0)
 		{
 			//第七步，send 向客户端发送一条数据
 		/*
@@ -182,30 +183,12 @@ int main(void)
 		  返回值：
 			   如果未发生错误，则send返回已发送的字节总数， 该总数可以小于len参数中请求发送的字节数。否则，将返回SOCKET_ERROR的值，并且可以通过调用WSAGetLastError来检索特定的错误代码
 		*/
-			strcpy_s(info, "zhangSan");
-			strcat_s(sendbuf, sizeof(sendbuf), info);
+
+			dpinfo.Age = 20;
+			strcpy_s(dpinfo.Name, "zhangSan");
+			strcpy_s(dpinfo.Address, "Guangdong shenzhen");
 			//strcat(sendbuf, name);
-			error = send(_socket_client, sendbuf, (int)strlen(sendbuf), 0);
-			if (error == SOCKET_ERROR)
-			{
-				cout << "send failed with error : " << WSAGetLastError() << endl;
-				closesocket(_socket_server);
-				closesocket(_socket_client);
-				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
-				return 1;
-			}
-			else
-			{
-				cout << "send  success." << endl;
-			}
-		}
-		else if (strncmp(recvBuf, "address", sizeof("address")) == 0)
-		{
-			//char address[20] = "Guangdong shenzhen";
-			strcpy_s(info, "Guangdong shenzhen");
-			strcat_s(sendbuf, sizeof(sendbuf), info);
-			//strcat(sendbuf, address);
-			error = send(_socket_client, sendbuf, (int)strlen(sendbuf), 0);
+			error = send(_socket_client, (const char*)(&dpinfo), sizeof(DP), 0);
 			if (error == SOCKET_ERROR)
 			{
 				cout << "send failed with error : " << WSAGetLastError() << endl;
@@ -221,10 +204,10 @@ int main(void)
 		}
 		else
 		{
-			//char unknown[20] = "Unknown problem";
-			strcpy_s(info, "Unknown problem");
-			strcat_s(sendbuf,sizeof(sendbuf), info);
-			error = send(_socket_client, sendbuf, (int)strlen(sendbuf), 0);
+			dpinfo.Age =-1;
+			strcpy_s(dpinfo.Name, "Unknown");
+			strcpy_s(dpinfo.Address, "Unknown");
+			error = send(_socket_client, (const char*)(&dpinfo), sizeof(DP), 0);
 			if (error == SOCKET_ERROR)
 			{
 				cout << "send failed with error : " << WSAGetLastError() << endl;
