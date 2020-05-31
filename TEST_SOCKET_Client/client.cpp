@@ -8,7 +8,8 @@ using namespace std;
 
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
 //客户端：
-
+char sendbuf[128]{ 0 }; //发送数据区
+char recvbuf[128]{ 0 };//接受数据区
 
 
 int main(void)
@@ -24,16 +25,16 @@ int main(void)
 	 返回值：如果成功，WSAStartup函数返回0。
 
 	*/
-	int iResult=WSAStartup(ver, &wsadata); //启动SOCKET连接
+	int iResult = WSAStartup(ver, &wsadata); //启动SOCKET连接
 	if (iResult != NO_ERROR)
 	{
 		cout << "WSAStartup function failed with error: " << iResult << endl;
 	}
-	
-		
-		
+
+
+
 	//	1：建立一个socket
-	SOCKET _sock_server= socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	SOCKET _sock_server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (_sock_server == INVALID_SOCKET)
 	{
 		cout << "socket function failed with error = " << WSAGetLastError() << endl;
@@ -44,7 +45,7 @@ int main(void)
 		cout << "socket function  success" << endl;
 	}
 	//	2：连接服务器 connect
-	char* strip = (char *)("127.0.0.1");
+	char* strip = (char*)("127.0.0.1");
 	SOCKADDR_IN _sock_addr{};
 	_sock_addr.sin_family = AF_INET;
 	_sock_addr.sin_port = htons(4567);
@@ -53,13 +54,13 @@ int main(void)
 
 	/*
 	  connect:
-	    参数：	 _In_ SOCKET s,  标识未连接套接字的描述符
+		参数：	 _In_ SOCKET s,  标识未连接套接字的描述符
 				 _In_reads_bytes_(namelen) const struct sockaddr FAR * name,  指向应建立连接的sockaddr结构的指针
 				 _In_ int namelen   name参数所指向的sockaddr结构的长度（以字节为单位）
 		返回值：
 				如果未发生错误，则 connect返回零。否则，它将返回SOCKET_ERROR，并且可以通过调用WSAGetLastError来检索特定的错误代码 。
 	*/
-    iResult=connect(_sock_server, (SOCKADDR*)&_sock_addr, sizeof(SOCKADDR_IN));
+	iResult = connect(_sock_server, (SOCKADDR*)&_sock_addr, sizeof(SOCKADDR_IN));
 	if (iResult == SOCKET_ERROR)
 	{
 		cout << "connect function failed with error: " << WSAGetLastError() << endl;
@@ -76,12 +77,19 @@ int main(void)
 		cout << "Connected to server is success." << endl;
 	}
 
-	
+
+	while (true)
 	{
-		//可选
-		char* sendbuf =(char*) ("this is a test");
+		//发送新
+		memset(sendbuf, 0, sizeof(sendbuf));
+		cout << "请输入请求信息：" << endl;
+		cin.getline(sendbuf, 128);
+		if (strcmp(sendbuf, "exit") == 0)
+		{
+			break;
+		}
 		iResult = send(_sock_server, sendbuf, strlen(sendbuf), 0);//发送数据
-		if (iResult == SOCKET_ERROR) 
+		if (iResult == SOCKET_ERROR)
 		{
 			cout << "send failed: " << WSAGetLastError() << endl;
 			closesocket(_sock_server);
@@ -89,27 +97,61 @@ int main(void)
 			return 1;
 		}
 		cout << "Bytes Sent : " << iResult << endl;
-		/*
-		   SD_RECEIVE (0): 关机接收操作
-		   SD_SEND	  (1): 关闭发送操作
-		   SD_BOTH    (2): 关闭发送和接收操作	
-		*/
-		iResult = shutdown(_sock_server, SD_SEND);//关闭发送操作
-		if (iResult == SOCKET_ERROR) 
+
+		//接受信息
+		memset(recvbuf, 0,sizeof(recvbuf));
+		iResult = recv(_sock_server, recvbuf, sizeof(recvbuf), 0);
+		if (iResult > 0)
 		{
-			cout << "shutdown failed: " << WSAGetLastError() << endl;
-			closesocket(_sock_server);
-			WSACleanup();
-			return 1;
+			cout << "Bytes received : " << iResult << endl;
+			cout << "recv msg :" << recvbuf << endl;
 		}
+		else if (iResult == 0)
+		{
+			cout << "Connection closed. " << endl;
+		}
+		else
+		{
+			cout << "recv failed : " << WSAGetLastError() << endl;
+		}
+
 
 	}
 
-	//	3：接受客户端消息 recv
+	//	{
+	//		//可选
+	//		//char* sendbuf =(char*) ("this is a test");
+	//		iResult = send(_sock_server, sendbuf, strlen(sendbuf), 0);//发送数据
+	//		if (iResult == SOCKET_ERROR)
+	//		{
+	//			cout << "send failed: " << WSAGetLastError() << endl;
+	//			closesocket(_sock_server);
+	//			WSACleanup();
+	//			return 1;
+	//		}
+	//		cout << "Bytes Sent : " << iResult << endl;
+	//		/*
+	//		   SD_RECEIVE (0): 关机接收操作
+	//		   SD_SEND	  (1): 关闭发送操作
+	//		   SD_BOTH    (2): 关闭发送和接收操作
+	//		*/
+	//	iResult = shutdown(_sock_server, SD_SEND);//关闭发送操作
+	//	if (iResult == SOCKET_ERROR)
+	//	{
+	//		cout << "shutdown failed: " << WSAGetLastError() << endl;
+	//		closesocket(_sock_server);
+	//		WSACleanup();
+	//		return 1;
+	//	}
+	//
+	//}
+
+	//   //	3：接受客户端消息 recv
+	/*
 	do
 	{
 		char buf[256] = { 0 };
-		iResult =recv(_sock_server, buf, sizeof(buf), 0);
+		iResult = recv(_sock_server, buf, sizeof(buf), 0);
 		if (iResult > 0)
 		{
 			cout << "Bytes received : " << iResult << endl;
@@ -121,11 +163,12 @@ int main(void)
 		}
 		else
 		{
-			cout << "recv failed : "<< WSAGetLastError() << endl;
+			cout << "recv failed : " << WSAGetLastError() << endl;
 		}
-		
+
 	} while (iResult > 0);
-	
+     */
+
 
 	//	4：关闭套接字 closesocket
 	closesocket(_sock_server);
@@ -133,8 +176,8 @@ int main(void)
 	return 0;
 
 	/**
-	
-	
-	
+
+
+
 	***/
 }

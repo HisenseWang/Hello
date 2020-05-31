@@ -7,7 +7,9 @@
 using namespace std;
 
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
-
+char recvBuf[128] { 0 };//接受缓存区
+char sendbuf[128]{0 }; //发送缓冲区
+char info[32]{ 0 };//处理信息缓冲区
 
 
 int main(void)
@@ -50,6 +52,7 @@ int main(void)
 	if (_socket_server == INVALID_SOCKET)
 	{
 		cout << "socket function failed with error = " << WSAGetLastError() << endl;
+		WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 		return 1;
 	}
 	else
@@ -86,6 +89,8 @@ int main(void)
 	if (error == SOCKET_ERROR)
 	{
 		cout << "bind failed with error = " << WSAGetLastError() << endl;
+		closesocket(_socket_server);
+		WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 		return 1;
 	}
 	else
@@ -105,6 +110,8 @@ int main(void)
 	if (error == SOCKET_ERROR)
 	{
 		cout << "listen function failed with error = " << WSAGetLastError() << endl;
+		closesocket(_socket_server);
+		WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 		return 1;
 	}
 	else
@@ -116,35 +123,53 @@ int main(void)
 	SOCKET  _socket_client{};//远程客户端套字节信息
 	SOCKADDR_IN _client_addr;
 	int addlen = sizeof(SOCKADDR_IN);
-	const char* sendbuf = (const char*)("Client: sending data test");
-	while (true)
-	{
-		/*
+    
+	/*
 		   accept:接受客户端连接
 		   参数：   _In_ SOCKET s   一个描述符，用于标识已使用侦听功能置于侦听状态的套接字 。实际上，连接是通过accept返回的套接字建立的
-			       _Out_writes_bytes_opt_(*addrlen) struct sockaddr FAR * addr  通信层已知的指向缓冲区的可选指针，该缓冲区接收连接实体的地址。addr参数的确切格式由创建sockaddr结构的套接字时建立的地址族确定 。
-			       _Inout_opt_ int FAR * addrlen  指向整数的可选指针，该整数包含addr参数指向的结构的长度
-	       返回值：
+				   _Out_writes_bytes_opt_(*addrlen) struct sockaddr FAR * addr  通信层已知的指向缓冲区的可选指针，该缓冲区接收连接实体的地址。addr参数的确切格式由创建sockaddr结构的套接字时建立的地址族确定 。
+				   _Inout_opt_ int FAR * addrlen  指向整数的可选指针，该整数包含addr参数指向的结构的长度
+		   返回值：
 				如果没有发生错误， accept将返回SOCKET类型的值，该值是新套接字的描述符。该返回值是实际建立连接的套接字的句柄。
 				否则，将返回INVALID_SOCKET的值，并且可以通过调用WSAGetLastError来检索特定的错误代码 。
 				addrlen引用的整数最初包含addr指向的空间量。返回时，它将包含返回地址的实际长度（以字节为单位）。
 
-	    */
+		*/
 		//第四步：accept 等待接受客户端连接
-		_socket_client = accept(_socket_server, (SOCKADDR*)&_client_addr, &addlen);
-		if (_socket_client == INVALID_SOCKET)
+	_socket_client = accept(_socket_server, (SOCKADDR*)&_client_addr, &addlen);
+	if (_socket_client == INVALID_SOCKET)
+	{
+		cout << "accept failed with error = " << WSAGetLastError() << endl;
+		closesocket(_socket_server);
+		WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+		return 1;
+	}
+	else
+	{
+		char _ip_client[20]{ 0 };
+		inet_ntop(AF_INET, (void*)&_client_addr.sin_addr, _ip_client, 16);//转换IP地址为字符串
+		cout << "Client connected：" << _ip_client << " : " << _client_addr.sin_port << endl;
+	}
+
+	while (true)
+	{
+		//第五步，接受客户端消息
+		memset(recvBuf, 0, sizeof(recvBuf));
+		int recvlen=recv(_socket_client, recvBuf, sizeof(recvBuf), 0);
+		if (recvlen <= 0)
 		{
-			cout << "accept failed with error = " << WSAGetLastError() << endl;
-			return 1;
-		}
-		else
-		{
-			char _ip_client[20]{ 0 };
-			inet_ntop(AF_INET, (void*)&_client_addr.sin_addr, _ip_client, 16);//转换IP地址为字符串
-			cout << "Client connected："<< _ip_client <<" : "<<_client_addr.sin_port << endl;
+			cout << "Accept data length : " << recvlen <<" exit program."<< endl;
+			break;
 		}
 
-		//第五步，send 向客户端发送一条数据
+
+		//第六步，处理请求数据
+		memset(info, 0, sizeof(info));
+		memset(sendbuf, 0, sizeof(sendbuf));
+		strcpy_s(sendbuf, "Server sending data test: ");
+		if (strncmp(recvBuf, "name",sizeof("name")) == 0)
+		{
+			//第七步，send 向客户端发送一条数据
 		/*
 		  send 向客户端发送一条数据:
 		  参数：
@@ -157,17 +182,64 @@ int main(void)
 		  返回值：
 			   如果未发生错误，则send返回已发送的字节总数， 该总数可以小于len参数中请求发送的字节数。否则，将返回SOCKET_ERROR的值，并且可以通过调用WSAGetLastError来检索特定的错误代码
 		*/
-
-		error = send(_socket_client, sendbuf, (int)strlen(sendbuf), 0);
-		if (error == SOCKET_ERROR)
+			strcpy_s(info, "zhangSan");
+			strcat_s(sendbuf, sizeof(sendbuf), info);
+			//strcat(sendbuf, name);
+			error = send(_socket_client, sendbuf, (int)strlen(sendbuf), 0);
+			if (error == SOCKET_ERROR)
+			{
+				cout << "send failed with error : " << WSAGetLastError() << endl;
+				closesocket(_socket_server);
+				closesocket(_socket_client);
+				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+				return 1;
+			}
+			else
+			{
+				cout << "send  success." << endl;
+			}
+		}
+		else if (strncmp(recvBuf, "address", sizeof("address")) == 0)
 		{
-			cout << "send failed with error : " << WSAGetLastError() << endl;
-			return 1;
+			//char address[20] = "Guangdong shenzhen";
+			strcpy_s(info, "Guangdong shenzhen");
+			strcat_s(sendbuf, sizeof(sendbuf), info);
+			//strcat(sendbuf, address);
+			error = send(_socket_client, sendbuf, (int)strlen(sendbuf), 0);
+			if (error == SOCKET_ERROR)
+			{
+				cout << "send failed with error : " << WSAGetLastError() << endl;
+				closesocket(_socket_server);
+				closesocket(_socket_client);
+				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+				return 1;
+			}
+			else
+			{
+				cout << "send  success." << endl;
+			}
 		}
 		else
 		{
-			cout << "send  success." << endl;
+			//char unknown[20] = "Unknown problem";
+			strcpy_s(info, "Unknown problem");
+			strcat_s(sendbuf,sizeof(sendbuf), info);
+			error = send(_socket_client, sendbuf, (int)strlen(sendbuf), 0);
+			if (error == SOCKET_ERROR)
+			{
+				cout << "send failed with error : " << WSAGetLastError() << endl;
+				closesocket(_socket_server);
+				closesocket(_socket_client);
+				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+				return 1;
+			}
+			else
+			{
+				cout << "send  success." << endl;
+			}
 		}
+
+		
 	}
 	
 
@@ -176,7 +248,7 @@ int main(void)
 
 	//第六步：关闭套接字 closesocket
 	closesocket(_socket_server);
-
+	closesocket(_socket_client);
 	WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 	return 0;
 }
