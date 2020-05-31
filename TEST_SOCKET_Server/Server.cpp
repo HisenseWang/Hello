@@ -8,11 +8,8 @@
 using namespace std;
 
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
-char recvBuf[128] { 0 };//接受缓存区
-char sendbuf[128]{0 }; //发送缓冲区
-char info[32]{ 0 };//处理信息缓冲区
-
-DP dpinfo{};
+DP_RECV recdp{};//接受缓存区
+DP_SEND senddp{};//发送缓冲区
 
 
 int main(void)
@@ -68,7 +65,7 @@ int main(void)
 	//char* localIP;
 	//localHost = gethostbyname(""); //gethostbyname 参数为一个域名 只限IPV4 【已弃用】 使用 getaddrinfo（）函数代替，返回一个指向hostent 的指针 
 	//
-	//localIP = inet_ntoa(*(struct in_addr*) * localHost->h_addr_list);
+	//localIP = inet_ntoa(*(struct in_addr*) * localHost.h_addr_list);
 
 	/*
 		SOCKADDR_IN 结构体：
@@ -154,23 +151,64 @@ int main(void)
 		cout << "Client connected：" << _ip_client << " : " << _client_addr.sin_port << endl;
 	}
 
+	USER user{}; // todo. 获取用户名和密码进行对比 ,数据库或其他方式
 	while (true)
 	{
 		//第五步，接受客户端消息
-		memset(recvBuf, 0, sizeof(recvBuf));
-		int recvlen=recv(_socket_client, recvBuf, sizeof(recvBuf), 0);
+		recdp = {};
+		int recvlen=recv(_socket_client, (char*)&recdp, sizeof(DP_RECV), 0);
 		if (recvlen <= 0)
 		{
 			cout << "Accept data length : " << recvlen <<" exit program."<< endl;
 			break;
 		}
-
+		cout << "报文长度：" << recdp.dh.dataLength << " 报文命令：" << recdp.dh.command << endl;
 
 		//第六步，处理请求数据
 		
-		if (strncmp(recvBuf, "getuser",sizeof("getuser")) == 0)
+		switch (recdp.dh.command)
 		{
-			//第七步，send 向客户端发送一条数据
+		case CMD_IN:
+			if (strcmp(recdp.res.userName, user.userName) == 0 && strcmp(recdp.res.passWord, user.passWord) == 0)
+			{
+				senddp.dh.command = recdp.dh.command;
+				senddp.dh.dataLength = sizeof(DP_SEND);
+				senddp.res.result = RES_TRUE;
+				strcpy_s(senddp.res.msg, "login success");
+			}
+			else
+			{
+				senddp.dh.command = recdp.dh.command;
+				senddp.dh.dataLength = sizeof(DP_SEND);
+				senddp.res.result = RES_ERROR;
+				strcpy_s(senddp.res.msg, "login failure");
+			}
+			break;
+		case CMD_OUT:
+			if (strcmp(recdp.res.userName, user.userName) == 0 && strcmp(recdp.res.passWord, user.passWord) == 0)
+			{
+				senddp.dh.command = recdp.dh.command;
+				senddp.dh.dataLength = sizeof(DP_SEND);
+				senddp.res.result = RES_FALSE;
+				strcpy_s(senddp.res.msg, "logout success");
+			}
+			else
+			{
+				senddp.dh.command = recdp.dh.command;
+				senddp.dh.dataLength = sizeof(DP_SEND);
+				senddp.res.result = RES_ERROR;
+				strcpy_s(senddp.res.msg, "logout failure");
+			}
+			break;
+		default:
+			senddp.dh.command = recdp.dh.command;
+			senddp.dh.dataLength = sizeof(DP_SEND);
+			senddp.res.result = RES_UNK;
+			strcpy_s(senddp.res.msg, "An unknown request");
+			break;
+		}
+		
+		//第七步，send 向客户端发送一条数据
 		/*
 		  send 向客户端发送一条数据:
 		  参数：
@@ -183,46 +221,19 @@ int main(void)
 		  返回值：
 			   如果未发生错误，则send返回已发送的字节总数， 该总数可以小于len参数中请求发送的字节数。否则，将返回SOCKET_ERROR的值，并且可以通过调用WSAGetLastError来检索特定的错误代码
 		*/
-
-			dpinfo.Age = 20;
-			strcpy_s(dpinfo.Name, "zhangSan");
-			strcpy_s(dpinfo.Address, "Guangdong shenzhen");
-			//strcat(sendbuf, name);
-			error = send(_socket_client, (const char*)(&dpinfo), sizeof(DP), 0);
-			if (error == SOCKET_ERROR)
-			{
-				cout << "send failed with error : " << WSAGetLastError() << endl;
-				closesocket(_socket_server);
-				closesocket(_socket_client);
-				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
-				return 1;
-			}
-			else
-			{
-				cout << "send  success." << endl;
-			}
+		error = send(_socket_client, (const char*)(&senddp), sizeof(DP_SEND), 0);
+		if (error == SOCKET_ERROR)
+		{
+			cout << "send failed with error : " << WSAGetLastError() << endl;
+			closesocket(_socket_server);
+			closesocket(_socket_client);
+			WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+			return 1;
 		}
 		else
 		{
-			dpinfo.Age =-1;
-			strcpy_s(dpinfo.Name, "Unknown");
-			strcpy_s(dpinfo.Address, "Unknown");
-			error = send(_socket_client, (const char*)(&dpinfo), sizeof(DP), 0);
-			if (error == SOCKET_ERROR)
-			{
-				cout << "send failed with error : " << WSAGetLastError() << endl;
-				closesocket(_socket_server);
-				closesocket(_socket_client);
-				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
-				return 1;
-			}
-			else
-			{
-				cout << "send  success." << endl;
-			}
+			cout << "send  success." << endl;
 		}
-
-		
 	}
 	
 

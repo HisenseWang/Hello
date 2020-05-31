@@ -9,9 +9,10 @@ using namespace std;
 
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
 //客户端：
-char sendbuf[128]{ 0 }; //发送数据区
-char recvbuf[128]{ 0 };//接受数据区
-//DP dpinfo{};//接受数据结构包
+char inputbuf[64]{ 0 }; //接受输入数据缓冲区
+
+DP_SEND senddp{};//发送数据缓冲区
+DP_RECV recvdp{};//接受数据缓冲区
 
 
 int main(void)
@@ -79,18 +80,36 @@ int main(void)
 		cout << "Connected to server is success." << endl;
 	}
 
-
+	//循环发送与接受
 	while (true)
 	{
 		//发送
-		memset(sendbuf, 0, sizeof(sendbuf));
+		memset(inputbuf, 0, sizeof(inputbuf));
+
 		cout << "请输入请求信息：" << endl;
-		cin.getline(sendbuf, 128);
-		if (strcmp(sendbuf, "exit") == 0)
+		cin.getline(inputbuf, sizeof(inputbuf));
+		if (strcmp(inputbuf, "exit") == 0)
 		{
 			break;
 		}
-		iResult = send(_sock_server, sendbuf, strlen(sendbuf), 0);//发送数据
+		senddp = {};
+		strcpy_s(senddp.userName, sizeof(senddp.userName), "zhangSan");
+		strcpy_s(senddp.passWord, sizeof(senddp.passWord), "12345678");
+
+		if (strcmp(inputbuf, "in") == 0)
+		{
+			senddp.command = CMD_IN;
+		}
+		else if(strcmp(inputbuf, "out") == 0)
+		{
+			senddp.command = CMD_OUT;
+		}
+		else
+		{
+			senddp.command = CMD_UNK;
+		}
+
+		iResult = send(_sock_server, (const char*)&senddp, sizeof(DP_SEND), 0);//发送数据
 		if (iResult == SOCKET_ERROR)
 		{
 			cout << "send failed: " << WSAGetLastError() << endl;
@@ -101,13 +120,13 @@ int main(void)
 		cout << "Bytes Sent : " << iResult << endl;
 
 		//接受信息
-		memset(recvbuf, 0, sizeof(recvbuf));
-		iResult = recv(_sock_server, recvbuf, sizeof(recvbuf), 0);
+		recvdp = {};
+		iResult = recv(_sock_server, (char *)&recvdp, sizeof(DP_RECV), 0);
 		if (iResult > 0)
 		{
 			cout << "Bytes received : " << iResult << endl;
-			DP* dpinfo = (DP*)(recvbuf);//接受数据缓冲区转换为数据包
-			cout << "recv msg :" << dpinfo->Name <<" "<<dpinfo->Age<<" "<<dpinfo->Address<< endl;
+			//DP* dpinfo = (DP*)(recvbuf);//接受数据缓冲区转换为数据包
+			cout << "recv msg :" << (int)recvdp.result <<" "<< recvdp.msg <<" "<< endl;
 		}
 		else if (iResult == 0)
 		{
