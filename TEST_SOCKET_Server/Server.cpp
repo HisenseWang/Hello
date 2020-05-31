@@ -246,7 +246,7 @@ int main(void)
 	
 
 
-	//第六步：关闭套接字 closesocket
+	//第八步：关闭套接字 closesocket
 	closesocket(_socket_server);
 	closesocket(_socket_client);
 	WSACleanup();//关闭SOCKET连接  清除 windows socket 环境

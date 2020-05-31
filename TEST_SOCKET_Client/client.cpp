@@ -99,7 +99,7 @@ int main(void)
 		cout << "Bytes Sent : " << iResult << endl;
 
 		//接受信息
-		memset(recvbuf, 0,sizeof(recvbuf));
+		memset(recvbuf, 0, sizeof(recvbuf));
 		iResult = recv(_sock_server, recvbuf, sizeof(recvbuf), 0);
 		if (iResult > 0)
 		{
@@ -117,6 +117,7 @@ int main(void)
 
 
 	}
+
 
 	//	{
 	//		//可选
@@ -167,10 +168,10 @@ int main(void)
 		}
 
 	} while (iResult > 0);
-     */
+	 */
 
 
-	//	4：关闭套接字 closesocket
+	 //	4：关闭套接字 closesocket
 	closesocket(_sock_server);
 	WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 	return 0;
