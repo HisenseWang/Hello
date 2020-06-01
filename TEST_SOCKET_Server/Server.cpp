@@ -1,15 +1,20 @@
 #define WIN32_LEAN_AND_MEAN  //防止 Windows.h 与 WinSock2.h 宏定义冲突 ，或调换两个头文件顺序
 //#define _WINSOCK_DEPRECATED_NO_WARNINGS //不显示警告信息 
 #include<iostream>
+#include<vector>
 #include<Windows.h>
 #include<WinSock2.h>
 #include <ws2tcpip.h> //getaddrinfo() 函数头文件
 #include"DataPackage.h"
 using namespace std;
 
+#pragma warning(disable:6319)
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
-DP_RECV recdp{};//接受缓存区
-DP_SEND senddp{};//发送缓冲区
+
+vector<SOCKET> GLO_Sock_Client;
+
+
+int  handle_request(SOCKET _socket_client);
 
 
 int main(void)
@@ -120,95 +125,180 @@ int main(void)
 	}
 
 	
-	SOCKET  _socket_client{};//远程客户端套字节信息
+	SOCKET  _socket_client=INVALID_SOCKET;//远程客户端套字节信息
 	SOCKADDR_IN _client_addr;
 	int addlen = sizeof(SOCKADDR_IN);
     
-	/*
-		   accept:接受客户端连接
-		   参数：   _In_ SOCKET s   一个描述符，用于标识已使用侦听功能置于侦听状态的套接字 。实际上，连接是通过accept返回的套接字建立的
+	
+
+	
+	while (true)
+	{
+		/*
+			select函数确定一个或多个套接字的状态，如果需要，等待执行同步I/O。 (伯克利 Socket)
+			参数：
+				 _In_ int nfds,   Windows下忽略 ，UNIX、LINUX使用。 包含nfds参数只是为了与Berkeley（伯克利）套接字兼容。
+				 _Inout_opt_ fd_set FAR * readfds, 一个可选指针，指向一组要检查可读性的套接字
+				 _Inout_opt_ fd_set FAR * writefds, 指向要检查可写性的套接字集的可选指针。
+				 _Inout_opt_ fd_set FAR * exceptfds, 一个可选指针，指向一组要检查错误的套接字。
+				 _In_opt_ const struct timeval FAR * timeout  选择等待的最大时间，以TIMEVAL结构的形式提供。将timeout参数设置为null以执行阻塞操作。
+			返回值：
+					select函数返回准备好并包含在fd_set结构中的套接字句柄的总数，如果时间限制过期则返回零，如果发生错误则返回SOCKET_ERROR。如果返回值是SOCKET_ERROR，则可以使用WSAGetLastError检索特定的错误代码。
+		*/
+		fd_set fdRead;
+		fd_set fdWrite;
+		fd_set fdExp;
+	    TIMEVAL time{ 0,1000 };//{秒，毫秒} 超时
+
+		FD_ZERO(&fdRead);//初始化集合
+		FD_ZERO(&fdWrite);
+		FD_ZERO(&fdExp);
+
+		FD_SET(_socket_server, &fdRead);//把sock放入要测试的描述符集 就是说把sock放入了rfd里面 这样下一步调用select对rfd进行测试的时候就会测试sock了(因为我们将sock放入的rdf) 一个描述符集可以包含多个被测试的描述符,
+		FD_SET(_socket_server, &fdWrite);
+		FD_SET(_socket_server, &fdExp);
+
+		for (size_t i = 0; i < GLO_Sock_Client.size(); i++)//变量集合查找可用Socket
+		{
+			FD_SET(GLO_Sock_Client.at(i), &fdRead);
+		}
+
+			
+		//第一个参数 nfds 是一个整数值，是指在 fd_set 集合中所有的socket 的范围，而不是数量。在 windows 是系统自动处理，而 其他系统（UNIX、LINUX），则需要指定。
+		error = select(_socket_server+1,&fdRead,&fdWrite,&fdExp, NULL);
+		if (error == SOCKET_ERROR)
+		{
+			cout << "select function failed with error = " << WSAGetLastError() << endl;
+			closesocket(_socket_server);
+			WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+			return 1;
+		}
+
+
+		if (FD_ISSET(_socket_server, &fdRead))//描述符（socket）是否有可用数据，是否准备好了
+		{
+			FD_CLR(_socket_server, &fdRead);//清除数据，反复使用
+			/*
+				accept:接受客户端连接
+				 参数：   _In_ SOCKET s   一个描述符，用于标识已使用侦听功能置于侦听状态的套接字 。实际上，连接是通过accept返回的套接字建立的
 				   _Out_writes_bytes_opt_(*addrlen) struct sockaddr FAR * addr  通信层已知的指向缓冲区的可选指针，该缓冲区接收连接实体的地址。addr参数的确切格式由创建sockaddr结构的套接字时建立的地址族确定 。
 				   _Inout_opt_ int FAR * addrlen  指向整数的可选指针，该整数包含addr参数指向的结构的长度
-		   返回值：
-				如果没有发生错误， accept将返回SOCKET类型的值，该值是新套接字的描述符。该返回值是实际建立连接的套接字的句柄。
-				否则，将返回INVALID_SOCKET的值，并且可以通过调用WSAGetLastError来检索特定的错误代码 。
-				addrlen引用的整数最初包含addr指向的空间量。返回时，它将包含返回地址的实际长度（以字节为单位）。
+				返回值：
+						如果没有发生错误， accept将返回SOCKET类型的值，该值是新套接字的描述符。该返回值是实际建立连接的套接字的句柄。
+						否则，将返回INVALID_SOCKET的值，并且可以通过调用WSAGetLastError来检索特定的错误代码 。
+						addrlen引用的整数最初包含addr指向的空间量。返回时，它将包含返回地址的实际长度（以字节为单位）。
 
 		*/
 		//第四步：accept 等待接受客户端连接
-	_socket_client = accept(_socket_server, (SOCKADDR*)&_client_addr, &addlen);
-	if (_socket_client == INVALID_SOCKET)
-	{
-		cout << "accept failed with error = " << WSAGetLastError() << endl;
-		closesocket(_socket_server);
-		WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
-		return 1;
-	}
-	else
-	{
-		char _ip_client[20]{ 0 };
-		inet_ntop(AF_INET, (void*)&_client_addr.sin_addr, _ip_client, 16);//转换IP地址为字符串
-		cout << "Client connected：" << _ip_client << " : " << _client_addr.sin_port << endl;
-	}
-
-	USER user{}; // todo. 获取用户名和密码进行对比 ,数据库或其他方式
-	while (true)
-	{
-		//第五步，接受客户端消息
-		recdp = {};
-		int recvlen=recv(_socket_client, (char*)&recdp, sizeof(DP_RECV), 0);
-		if (recvlen <= 0)
-		{
-			cout << "Accept data length : " << recvlen <<" exit program."<< endl;
-			break;
+			_socket_client = accept(_socket_server, (SOCKADDR*)&_client_addr, &addlen);
+			if (_socket_client == INVALID_SOCKET)
+			{
+				cout << "accept failed with error = " << WSAGetLastError() << endl;
+				closesocket(_socket_server);
+				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+				return 1;
+			}
+		
+			//有多个客户端加入，fdRead 集合要去接受其他客户端，所以这里存储连接的客户端
+			GLO_Sock_Client.push_back(_socket_client);
+			char _ip_client[20]{ 0 };
+			inet_ntop(AF_INET, (void*)&_client_addr.sin_addr, _ip_client, 16);//转换IP地址为字符串
+			cout << "Client connected：" << _ip_client << " : " << _client_addr.sin_port << endl;
+			
 		}
-		cout << "报文长度：" << recdp.dh.dataLength << " 报文命令：" << recdp.dh.command << endl;
+
+		
 
 		//第六步，处理请求数据
-		
-		switch (recdp.dh.command)
+		for (size_t i = 0; i < fdRead.fd_count; i++)
 		{
-		case CMD_IN:
-			if (strcmp(recdp.res.userName, user.userName) == 0 && strcmp(recdp.res.passWord, user.passWord) == 0)
+			int res=handle_request(fdRead.fd_array[i]);
+			if (-1 == res)
 			{
-				senddp.dh.command = recdp.dh.command;
-				senddp.dh.dataLength = sizeof(DP_SEND);
-				senddp.res.result = RES_TRUE;
-				strcpy_s(senddp.res.msg, "login success");
+				auto iter = find(GLO_Sock_Client.begin(), GLO_Sock_Client.end(), fdRead.fd_array[i]);
+				if (iter != GLO_Sock_Client.end())
+				{
+					GLO_Sock_Client.erase(iter);
+				}
 			}
-			else
-			{
-				senddp.dh.command = recdp.dh.command;
-				senddp.dh.dataLength = sizeof(DP_SEND);
-				senddp.res.result = RES_ERROR;
-				strcpy_s(senddp.res.msg, "login failure");
-			}
-			break;
-		case CMD_OUT:
-			if (strcmp(recdp.res.userName, user.userName) == 0 && strcmp(recdp.res.passWord, user.passWord) == 0)
-			{
-				senddp.dh.command = recdp.dh.command;
-				senddp.dh.dataLength = sizeof(DP_SEND);
-				senddp.res.result = RES_FALSE;
-				strcpy_s(senddp.res.msg, "logout success");
-			}
-			else
-			{
-				senddp.dh.command = recdp.dh.command;
-				senddp.dh.dataLength = sizeof(DP_SEND);
-				senddp.res.result = RES_ERROR;
-				strcpy_s(senddp.res.msg, "logout failure");
-			}
-			break;
-		default:
-			senddp.dh.command = recdp.dh.command;
-			senddp.dh.dataLength = sizeof(DP_SEND);
-			senddp.res.result = RES_UNK;
-			strcpy_s(senddp.res.msg, "An unknown request");
-			break;
 		}
 		
-		//第七步，send 向客户端发送一条数据
+		
+	}
+	
+
+	
+
+
+	//第八步：关闭套接字 closesocket
+	for (size_t i = 0; i < GLO_Sock_Client.size(); i++)//变量集合查找可用Socket
+	{
+		closesocket(GLO_Sock_Client.at(i));
+	}
+	closesocket(_socket_server);
+	WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
+	return 0;
+}
+
+int  handle_request(SOCKET _socket_client)
+{
+	//第五步，接受客户端消息
+	USER user{}; // todo. 获取用户名和密码进行对比 ,数据库或其他方式
+	//DP_RECV recdp{};//接受缓存区
+	char recvbuf[1024] = { 0 };//接受数据缓冲区 进行拆包处理
+	DP_SEND senddp{};//发送缓冲区
+	int recvlen = recv(_socket_client, recvbuf, sizeof(DP_RECV), 0);
+	DataHeader* dp_HD = (DataHeader*)recvbuf; //进行数据结构转换
+	if (recvlen <= 0)
+	{
+		cout << "Accept data length : [" << recvlen <<"]  "<< "client program exit ." << endl;
+		return -1;
+	}
+	cout << "报文长度：[" << dp_HD->dataLength << "]  报文命令：[" << dp_HD->command <<"]"<< endl;
+	UserInfo* dp_UF = (UserInfo*)(recvbuf + sizeof(DataHeader));//指针偏移
+	switch (dp_HD->command)
+	{
+	case CMD_IN:
+		if (strcmp(dp_UF->userName, user.userName) == 0 && strcmp(dp_UF->passWord, user.passWord) == 0)
+		{
+			senddp.dh.command = dp_HD->command;
+			senddp.dh.dataLength = sizeof(DP_SEND);
+			senddp.res.result = RES_TRUE;
+			strcpy_s(senddp.res.msg, "login success");
+		}
+		else
+		{
+			senddp.dh.command = dp_HD->command;
+			senddp.dh.dataLength = sizeof(DP_SEND);
+			senddp.res.result = RES_ERROR;
+			strcpy_s(senddp.res.msg, "login failure");
+		}
+		break;
+	case CMD_OUT:
+		if (strcmp(dp_UF->userName, user.userName) == 0 && strcmp(dp_UF->passWord, user.passWord) == 0)
+		{
+			senddp.dh.command = dp_HD->command;
+			senddp.dh.dataLength = sizeof(DP_SEND);
+			senddp.res.result = RES_FALSE;
+			strcpy_s(senddp.res.msg, "logout success");
+		}
+		else
+		{
+			senddp.dh.command = dp_HD->command;
+			senddp.dh.dataLength = sizeof(DP_SEND);
+			senddp.res.result = RES_ERROR;
+			strcpy_s(senddp.res.msg, "logout failure");
+		}
+		break;
+	default:
+		senddp.dh.command = dp_HD->command;
+		senddp.dh.dataLength = sizeof(DP_SEND);
+		senddp.res.result = RES_UNK;
+		strcpy_s(senddp.res.msg, "An unknown request");
+		break;
+	}
+
+	//第七步，send 向客户端发送一条数据
 		/*
 		  send 向客户端发送一条数据:
 		  参数：
@@ -221,28 +311,16 @@ int main(void)
 		  返回值：
 			   如果未发生错误，则send返回已发送的字节总数， 该总数可以小于len参数中请求发送的字节数。否则，将返回SOCKET_ERROR的值，并且可以通过调用WSAGetLastError来检索特定的错误代码
 		*/
-		error = send(_socket_client, (const char*)(&senddp), sizeof(DP_SEND), 0);
-		if (error == SOCKET_ERROR)
-		{
-			cout << "send failed with error : " << WSAGetLastError() << endl;
-			closesocket(_socket_server);
-			closesocket(_socket_client);
-			WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
-			return 1;
-		}
-		else
-		{
-			cout << "send  success." << endl;
-		}
+	int error = send(_socket_client, (const char*)(&senddp), sizeof(DP_SEND), 0);
+	if (error == SOCKET_ERROR)
+	{
+		cout << "send failed with error : " << WSAGetLastError() << endl;
+		return -1;
 	}
-	
+	else
+	{
+		cout << "send  success." << endl;
+	}
 
-	
-
-
-	//第八步：关闭套接字 closesocket
-	closesocket(_socket_server);
-	closesocket(_socket_client);
-	WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 	return 0;
 }
