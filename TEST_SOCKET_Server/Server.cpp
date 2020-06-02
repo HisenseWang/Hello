@@ -12,7 +12,7 @@ using namespace std;
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
 
 vector<SOCKET> GLO_Sock_Client;
-
+DP_SEND dp_jion{}; //广播进入
 
 int  handle_request(SOCKET _socket_client);
 
@@ -147,8 +147,8 @@ int main(void)
 		*/
 		fd_set fdRead;
 		fd_set fdWrite;
-		fd_set fdExp;
-	    TIMEVAL time{ 0,1000 };//{秒，毫秒} 超时
+		fd_set fdExp;	
+	    TIMEVAL time{ 1,0};//{秒，毫秒} 超时
 
 		FD_ZERO(&fdRead);//初始化集合
 		FD_ZERO(&fdWrite);
@@ -158,14 +158,14 @@ int main(void)
 		FD_SET(_socket_server, &fdWrite);
 		FD_SET(_socket_server, &fdExp);
 
-		for (size_t i = 0; i < GLO_Sock_Client.size(); i++)//变量集合查找可用Socket
+		for (int i = (int)(GLO_Sock_Client.size()-1); i >=0 ; i--)//变量集合查找可用Socket
 		{
 			FD_SET(GLO_Sock_Client.at(i), &fdRead);
 		}
 
 			
 		//第一个参数 nfds 是一个整数值，是指在 fd_set 集合中所有的socket 的范围，而不是数量。在 windows 是系统自动处理，而 其他系统（UNIX、LINUX），则需要指定。
-		error = select(_socket_server+1,&fdRead,&fdWrite,&fdExp, NULL);
+		error = select(_socket_server+1,&fdRead,&fdWrite,&fdExp, &time);
 		if (error == SOCKET_ERROR)
 		{
 			cout << "select function failed with error = " << WSAGetLastError() << endl;
@@ -193,12 +193,21 @@ int main(void)
 			_socket_client = accept(_socket_server, (SOCKADDR*)&_client_addr, &addlen);
 			if (_socket_client == INVALID_SOCKET)
 			{
-				cout << "accept failed with error = " << WSAGetLastError() << endl;
+				cout << "无效的客户端，accept failed with error = " << WSAGetLastError() << endl;
 				closesocket(_socket_server);
 				WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 				return 1;
 			}
-		
+			
+			for (int i = (int)(GLO_Sock_Client.size()-1); i >=0; i--)
+			{
+				dp_jion.dh.command = CMD_JION;
+				dp_jion.res.result = RES_TRUE;
+				strcpy_s(dp_jion.res.msg, "new client jion !");
+				dp_jion.dh.dataLength = sizeof(DP_SEND);
+				send(GLO_Sock_Client.at(i), (const char*)&dp_jion, sizeof(DP_SEND), 0);
+			}
+
 			//有多个客户端加入，fdRead 集合要去接受其他客户端，所以这里存储连接的客户端
 			GLO_Sock_Client.push_back(_socket_client);
 			char _ip_client[20]{ 0 };
@@ -223,7 +232,7 @@ int main(void)
 			}
 		}
 		
-		
+		cout << "处理其他业务逻辑 ... ..." << endl;
 	}
 	
 
@@ -242,6 +251,9 @@ int main(void)
 
 int  handle_request(SOCKET _socket_client)
 {
+	SOCKADDR_IN _client_addr;
+	int len = sizeof(SOCKADDR_IN);
+	int port = 0;
 	//第五步，接受客户端消息
 	USER user{}; // todo. 获取用户名和密码进行对比 ,数据库或其他方式
 	//DP_RECV recdp{};//接受缓存区
@@ -254,7 +266,16 @@ int  handle_request(SOCKET _socket_client)
 		cout << "Accept data length : [" << recvlen <<"]  "<< "client program exit ." << endl;
 		return -1;
 	}
-	cout << "报文长度：[" << dp_HD->dataLength << "]  报文命令：[" << dp_HD->command <<"]"<< endl;
+
+	char _ip_client[20]{ 0 };
+	if (!getpeername(_socket_client, (SOCKADDR*)&_client_addr, &len))//获取IP和端口
+	{
+		inet_ntop(AF_INET, (void*)&_client_addr.sin_addr, _ip_client, 16);//转换IP地址为字符串
+		port = ntohs(_client_addr.sin_port);
+	}
+	
+	cout <<"接受 IP：" << _ip_client<<" : ["<< port<<"]  "<<
+		"报文长度：[" << dp_HD->dataLength << "]  报文命令：[" << dp_HD->command <<"]"<< endl;
 	UserInfo* dp_UF = (UserInfo*)(recvbuf + sizeof(DataHeader));//指针偏移
 	switch (dp_HD->command)
 	{

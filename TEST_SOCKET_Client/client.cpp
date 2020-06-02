@@ -7,13 +7,13 @@
 #include"DataPackage.h"
 using namespace std;
 
+#pragma warning(disable:6319)//消除表达式中使用逗号运算符的警告
 //#pragma comment(lib,"ws2_32.lib") //连接静态库 ,可以添加到属性连接器中的附加依赖
 //客户端：
-char inputbuf[64]{ 0 }; //接受输入数据缓冲区
 
-DP_SEND senddp{};//发送数据缓冲区
-DP_RECV recvdp{};//接受数据缓冲区
 
+int  handle_request(SOCKET _socket); //数据接受
+string get_result(RESULT r);
 
 int main(void)
 {
@@ -37,8 +37,8 @@ int main(void)
 
 
 	//	1：建立一个socket
-	SOCKET _sock_server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (_sock_server == INVALID_SOCKET)
+	SOCKET _socket_server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (_socket_server == INVALID_SOCKET)
 	{
 		cout << "socket function failed with error = " << WSAGetLastError() << endl;
 		return 1;
@@ -63,11 +63,11 @@ int main(void)
 		返回值：
 				如果未发生错误，则 connect返回零。否则，它将返回SOCKET_ERROR，并且可以通过调用WSAGetLastError来检索特定的错误代码 。
 	*/
-	iResult = connect(_sock_server, (SOCKADDR*)&_sock_addr, sizeof(SOCKADDR_IN));
+	iResult = connect(_socket_server, (SOCKADDR*)&_sock_addr, sizeof(SOCKADDR_IN));
 	if (iResult == SOCKET_ERROR)
 	{
 		cout << "connect function failed with error: " << WSAGetLastError() << endl;
-		iResult = closesocket(_sock_server);
+		iResult = closesocket(_socket_server);
 		if (iResult == SOCKET_ERROR)
 		{
 			cout << "closesocket function failed with error: " << WSAGetLastError() << endl;
@@ -83,60 +83,25 @@ int main(void)
 	//循环发送与接受
 	while (true)
 	{
-		//发送
-		memset(inputbuf, 0, sizeof(inputbuf));
+		fd_set fdRead;
+		FD_ZERO(&fdRead);//初始化集合
+		FD_SET(_socket_server, &fdRead);
 
-		cout << "请输入请求信息：" << endl;
-		cin.getline(inputbuf, sizeof(inputbuf));
-		if (strcmp(inputbuf, "exit") == 0)
+		iResult = select(_socket_server, &fdRead, NULL, NULL, NULL);
+		if (iResult < 0)
 		{
+			cout << "select function failed with error: " << WSAGetLastError() << endl;
 			break;
 		}
-		senddp = {};
-		strcpy_s(senddp.userName, sizeof(senddp.userName), "zhangSan");
-		strcpy_s(senddp.passWord, sizeof(senddp.passWord), "12345678");
-
-		if (strcmp(inputbuf, "in") == 0)
+		if (FD_ISSET(_socket_server, &fdRead))
 		{
-			senddp.command = CMD_IN;
+			FD_CLR(_socket_server, &fdRead);
+			if (handle_request(_socket_server) == -1)
+			{
+				cout << "处理客户端消息 错误！程序结束。" << endl;
+				break;
+			}
 		}
-		else if(strcmp(inputbuf, "out") == 0)
-		{
-			senddp.command = CMD_OUT;
-		}
-		else
-		{
-			senddp.command = CMD_UNK;
-		}
-
-		iResult = send(_sock_server, (const char*)&senddp, sizeof(DP_SEND), 0);//发送数据
-		if (iResult == SOCKET_ERROR)
-		{
-			cout << "send failed: " << WSAGetLastError() << endl;
-			closesocket(_sock_server);
-			WSACleanup();
-			return 1;
-		}
-		cout << "Bytes Sent : " << iResult << endl;
-
-		//接受信息
-		recvdp = {};
-		iResult = recv(_sock_server, (char *)&recvdp, sizeof(DP_RECV), 0);
-		if (iResult > 0)
-		{
-			cout << "Bytes received : " << iResult << endl;
-			//DP* dpinfo = (DP*)(recvbuf);//接受数据缓冲区转换为数据包
-			cout << "recv msg :" << (int)recvdp.result <<" "<< recvdp.msg <<" "<< endl;
-		}
-		else if (iResult == 0)
-		{
-			cout << "Connection closed. " << endl;
-		}
-		else
-		{
-			cout << "recv failed : " << WSAGetLastError() << endl;
-		}
-
 
 	}
 
@@ -144,11 +109,11 @@ int main(void)
 	//	{
 	//		//可选
 	//		//char* sendbuf =(char*) ("this is a test");
-	//		iResult = send(_sock_server, sendbuf, strlen(sendbuf), 0);//发送数据
+	//		iResult = send(_socket_server, sendbuf, strlen(sendbuf), 0);//发送数据
 	//		if (iResult == SOCKET_ERROR)
 	//		{
 	//			cout << "send failed: " << WSAGetLastError() << endl;
-	//			closesocket(_sock_server);
+	//			closesocket(_socket_server);
 	//			WSACleanup();
 	//			return 1;
 	//		}
@@ -158,11 +123,11 @@ int main(void)
 	//		   SD_SEND	  (1): 关闭发送操作
 	//		   SD_BOTH    (2): 关闭发送和接收操作
 	//		*/
-	//	iResult = shutdown(_sock_server, SD_SEND);//关闭发送操作
+	//	iResult = shutdown(_socket_server, SD_SEND);//关闭发送操作
 	//	if (iResult == SOCKET_ERROR)
 	//	{
 	//		cout << "shutdown failed: " << WSAGetLastError() << endl;
-	//		closesocket(_sock_server);
+	//		closesocket(_socket_server);
 	//		WSACleanup();
 	//		return 1;
 	//	}
@@ -174,7 +139,7 @@ int main(void)
 	do
 	{
 		char buf[256] = { 0 };
-		iResult = recv(_sock_server, buf, sizeof(buf), 0);
+		iResult = recv(_socket_server, buf, sizeof(buf), 0);
 		if (iResult > 0)
 		{
 			cout << "Bytes received : " << iResult << endl;
@@ -194,8 +159,68 @@ int main(void)
 
 
 	 //	4：关闭套接字 closesocket
-	closesocket(_sock_server);
+	closesocket(_socket_server);
 	WSACleanup();//关闭SOCKET连接  清除 windows socket 环境
 	return 0;
 
+}
+
+int  handle_request(SOCKET _socket_client)
+{
+	//第五步，接受客户端消息
+	
+	//DP_RECV recdp{};//接受缓存区
+	char recvbuf[1024] = { 0 };//接受数据缓冲区 进行拆包处理
+	int recvlen = recv(_socket_client, recvbuf, sizeof(DP_RECV), 0);
+	DataHeader* dp_HD = (DataHeader*)recvbuf; //进行数据结构转换
+	if (recvlen <= 0)
+	{
+		cout << "服务端 ： Accept data length : [" << recvlen << "]  " << "server program exit ." << endl;
+		return -1;
+	}
+	cout << "报文长度：[" << dp_HD->dataLength << "]  报文命令：[" << dp_HD->command << "]" << endl;
+	RES* dp_rs = (RES*)(recvbuf + sizeof(DataHeader));//指针偏移
+	switch (dp_HD->command)
+	{
+		case CMD_IN:
+			cout << "登录 返回结果：" << get_result(dp_rs->result) << " 返回信息：" << dp_rs->msg << endl;
+			break;
+		case CMD_OUT:
+			cout << "登出 返回结果：" << get_result(dp_rs->result) << " 返回信息：" << dp_rs->msg << endl;
+			break;
+		case CMD_JOIN:
+			cout << "加入 返回结果：" << get_result(dp_rs->result) << " 返回信息：" << dp_rs->msg << endl;
+			break;
+		case CMD_UNK:
+			cout << "未知 返回结果：" << get_result(dp_rs->result) << " 返回信息：" << dp_rs->msg << endl;
+			break;
+		default:
+			break;
+	}
+
+	
+
+	return 0;
+}
+
+string get_result(RESULT r)
+{
+	switch (r)
+	{
+	case RES_TRUE:
+		return "通过";
+		break;
+	case RES_FALSE:
+		return "禁止";
+		break;
+	case RES_ERROR:
+		return "错误";
+		break;
+	case RES_UNK:
+		return "未知";
+		break;
+	default:
+		return "NULL";
+		break;
+	}
 }
