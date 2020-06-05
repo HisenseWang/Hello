@@ -31,9 +31,9 @@ typedef struct DataHeader
 typedef struct UserInfo
 {
 	/*用户名*/
-	char userName[16];
+	char userName[16]="zhangSan";
 	/*密码*/
-	char passWord[16];
+	char passWord[16]="12345678";
 }USER;
 
 //返回值结构

@@ -17,6 +17,7 @@ DP_SEND dp_jion{}; //广播进入
 int  handle_request(SOCKET _socket_client);
 
 
+
 int main(void)
 {
 
@@ -145,7 +146,7 @@ int main(void)
 			返回值：
 					select函数返回准备好并包含在fd_set结构中的套接字句柄的总数，如果时间限制过期则返回零，如果发生错误则返回SOCKET_ERROR。如果返回值是SOCKET_ERROR，则可以使用WSAGetLastError检索特定的错误代码。
 		*/
-		fd_set fdRead;
+		fd_set fdRead; //伯克利(BSD) 套接字 Socket 集合
 		fd_set fdWrite;
 		fd_set fdExp;	
 	    TIMEVAL time{ 1,0};//{秒，毫秒} 超时
@@ -175,7 +176,7 @@ int main(void)
 		}
 
 
-		if (FD_ISSET(_socket_server, &fdRead))//描述符（socket）是否有可用数据，是否准备好了
+		if (FD_ISSET(_socket_server, &fdRead))//查询描述符（socket）是否有可用数据，是否准备好了
 		{
 			FD_CLR(_socket_server, &fdRead);//清除数据，反复使用
 			/*

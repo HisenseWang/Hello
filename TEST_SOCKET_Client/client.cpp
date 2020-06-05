@@ -4,6 +4,7 @@
 #include<Windows.h>
 #include<WinSock2.h>
 #include <ws2tcpip.h>
+#include<thread>
 #include"DataPackage.h"
 using namespace std;
 
@@ -13,7 +14,10 @@ using namespace std;
 
 
 int  handle_request(SOCKET _socket); //数据接受
-string get_result(RESULT r);
+string get_result(int r);
+void Get_input_information(SOCKET sock);
+
+bool isRuning = true;
 
 int main(void)
 {
@@ -80,14 +84,16 @@ int main(void)
 		cout << "Connected to server is success." << endl;
 	}
 
+     thread t1(Get_input_information, _socket_server);
+	 t1.detach();
 	//循环发送与接受
 	while (true)
 	{
 		fd_set fdRead;
 		FD_ZERO(&fdRead);//初始化集合
 		FD_SET(_socket_server, &fdRead);
-
-		iResult = select(_socket_server, &fdRead, NULL, NULL, NULL);
+		timeval t = { 1,0 };
+		iResult = select(_socket_server, &fdRead, NULL, NULL, &t);
 		if (iResult < 0)
 		{
 			cout << "select function failed with error: " << WSAGetLastError() << endl;
@@ -101,6 +107,11 @@ int main(void)
 				cout << "处理客户端消息 错误！程序结束。" << endl;
 				break;
 			}
+		}
+
+		if (!isRuning)
+		{
+			break;
 		}
 
 	}
@@ -189,7 +200,7 @@ int  handle_request(SOCKET _socket_client)
 			cout << "登出 返回结果：" << get_result(dp_rs->result) << " 返回信息：" << dp_rs->msg << endl;
 			break;
 		case CMD_JOIN:
-			cout << "加入 返回结果：" << get_result(dp_rs->result) << " 返回信息：" << dp_rs->msg << endl;
+			cout << "加入 返回结果：" << get_result(dp_rs->result)<<" socket id="<< dp_HD->sock_id << " 返回信息：" << dp_rs->msg << endl;
 			break;
 		case CMD_UNK:
 			cout << "未知 返回结果：" << get_result(dp_rs->result) << " 返回信息：" << dp_rs->msg << endl;
@@ -203,7 +214,7 @@ int  handle_request(SOCKET _socket_client)
 	return 0;
 }
 
-string get_result(RESULT r)
+string get_result(int r)
 {
 	switch (r)
 	{
@@ -222,5 +233,44 @@ string get_result(RESULT r)
 	default:
 		return "NULL";
 		break;
+	}
+}
+
+void Get_input_information(SOCKET sock)
+{
+	while (isRuning)
+	{
+		char str[128] = { 0 };
+		scanf_s("%s", str, 128);
+		DP_SEND dp{};
+		if (strcmp(str, "in") == 0)
+		{
+			dp.command = CMD_IN;
+		}
+		else if (strcmp(str, "out") == 0)
+		{
+			dp.command = CMD_OUT;
+		}
+		else if (strcmp(str, "exit") == 0)
+		{
+			cout << "程序退出！" << endl;
+			isRuning = false;
+			return;
+		}
+		else
+		{
+			dp.command = CMD_UNK;
+		}
+		int res = send(sock, (const char*)&dp, sizeof(DP_SEND), 0);
+		if (res == SOCKET_ERROR)
+		{
+			cout << "send failed with error : " << WSAGetLastError() << endl;
+			isRuning = false;
+			return;
+		}
+		else
+		{
+			cout << "send  success." << endl;
+		}
 	}
 }

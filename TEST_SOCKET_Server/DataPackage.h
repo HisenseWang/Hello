@@ -37,8 +37,7 @@ typedef struct UserInfo
 	char userName[16]="zhangSan";
 	/*密码*/
 	char passWord[16]="12345678";
-	/*jion socket*/
-	int sock_id = 1;
+	
 }USER;
 
 //返回值结构
